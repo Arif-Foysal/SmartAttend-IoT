@@ -1,0 +1,7 @@
+opencv-python
+git+https://github.com/ageitgey/face_recognition_models
+face_recognition
+setuptools
+numpy
+SQLAlchemy
+# picamera2 ; on Raspberry Pi only
