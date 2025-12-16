@@ -4,7 +4,7 @@
     <aside class="w-64 bg-white shadow-md flex flex-col">
       <div class="p-6 border-b">
         <h1 class="text-2xl font-bold text-blue-600 flex items-center gap-2">
-          <span>SmartAttend</span>
+          <span>UIU SmartAttend</span>
         </h1>
         <p class="text-xs text-gray-400 mt-1">IoT Attendance System</p>
       </div>
