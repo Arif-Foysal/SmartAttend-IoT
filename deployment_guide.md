@@ -7,61 +7,39 @@ This guide details how to deploy the **Frontend to Netlify** and the **Backend t
 
 ---
 
-## 1. Backend Deployment (Vercel)
+## 1. Backend Deployment (Render)
+
+> **Why Render?**
+> The backend requires `dlib` (Face Recognition), which needs special system libraries like `cmake`. Vercel's standard environment fails to build this. Render fully supports Docker, which solves this problem easily.
 
 ### Prerequisites
 
-1.  **Vercel Account**: [Sign up here](https://vercel.com/signup).
-2.  **Supabase Account**: [Create a project here](https://supabase.com/).
-3.  **Vercel CLI** (Optional but recommended): `npm i -g vercel`
+1.  **Render Account**: [Sign up here](https://render.com/).
+2.  **Supabase Account**: For the database.
 
 ### Step 1: Configure Database (Supabase)
 
-1.  Create a new project on Supabase.
-2.  Go to **Project Settings -> Database**.
-3.  Copy the **Connection String (URI)**. It looks like:
-    `postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres`
-4.  Replace `[PASSWORD]` with your actual DB password.
-5.  **Important**: Keep this URL safe.
+_Follow the same step as before to get your Connection String._
 
-### Step 2: Prepare Backend Code
+### Step 2: Deploy to Render
 
-1.  Create a `vercel.json` file in the `backend/` directory:
-    ```json
-    {
-      "builds": [
-        {
-          "src": "main.py",
-          "use": "@vercel/python"
-        }
-      ],
-      "routes": [
-        {
-          "src": "/(.*)",
-          "dest": "main.py"
-        }
-      ]
-    }
-    ```
-2.  Ensure `backend/requirements.txt` includes:
-    - `fastapi`
-    - `uvicorn[standard]`
-    - `sqlalchemy`
-    - `asyncpg` (Required for Postgres)
-    - `psycopg2-binary`
-    - `python-multipart`
-    - `python-dotenv`
-    - `alembic` (Optional, for migrations)
+1.  Push your code to **GitHub**.
+2.  Log in to **Render Dashboard**.
+3.  Click **New +** -> **Web Service**.
+4.  Connect your GitHub repository.
+5.  **Settings**:
+    - **Root Directory**: `backend`
+    - **Runtime**: `Docker` (Render should detect the `Dockerfile` automatically).
+    - **Region**: Choose closest to you.
+    - **Instance Type**: Free (or Starter for better performance).
+6.  **Environment Variables**:
+    - Key: `DATABASE_URL`
+    - Value: Your Supabase Connection String.
+7.  Click **Create Web Service**.
 
-### Step 3: Deploy to Vercel
+Render will now build your Docker container (installing `cmake`, compiling `dlib`) and deploy it. This may take 5-10 minutes for the first build.
 
-1.  Go to your Vercel Dashboard -> **New Project**.
-2.  Import your GitHub repository.
-3.  **Root Directory**: Set this to `backend`.
-4.  **Environment Variables**: Add the following:
-    - `DATABASE_URL`: Paste your Supabase Connection String.
-    - `PYTHON_VERSION`: `3.9` (Recommended compatibility).
-5.  Click **Deploy**.
+8.  **Copy the Service URL** (e.g., `https://smartattend-api.onrender.com`). You will need this for the Frontend.
 
 ---
 
