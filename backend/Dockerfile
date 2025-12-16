@@ -1,25 +1,19 @@
-FROM python:3.9-slim
+# Use Miniconda to get pre-built binaries (Conda-forge has dlib binaries!)
+FROM continuumio/miniconda3
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    git \
-    libopenblas-dev \
-    liblapack-dev \
-    libx11-dev \
-    libgtk-3-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Essential system dependencies (git for pip install git+...)
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
-# Optimize for low-RAM build (Render free tier)
-ENV CMAKE_ARGS="-DDLIB_USE_CUDA=0"
-ENV MAX_JOBS=1
+# Install dlib from conda-forge (Pre-compiled Binary - No compiling needed!)
+# This is the magic step that prevents the build from getting stuck.
+RUN conda install -y -c conda-forge dlib
 
 WORKDIR /app
 
 COPY requirements.txt .
 
-# Install dependencies (will compile dlib slowly but safely)
+# Install other dependencies via pip
+# Pip will detect that 'dlib' is already installed by conda and skip compiling it.
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
