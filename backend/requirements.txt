@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+asyncpg
+pydantic
+python-multipart
+python-dotenv
+alembic
+psycopg2-binary
+git+https://github.com/ageitgey/face_recognition_models
+face_recognition
+opencv-python-headless
+numpy
+aiosqlite

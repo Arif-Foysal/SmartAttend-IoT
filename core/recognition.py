@@ -5,15 +5,15 @@ import pickle
 import time
 from datetime import datetime, timedelta
 import numpy as np
-from core.database import init_db, Student, Attendance
+from core.api_client import APIClient
 
 class FaceRecognizer:
-    def __init__(self, db_url='sqlite:///attendance.db'):
+    def __init__(self, api_url='http://localhost:8000'):
         self.known_face_encodings = []
         self.known_face_names = []
         self.known_face_ids = []
         
-        self.db_session = init_db(db_url)
+        self.api_client = APIClient(api_url)
         self.load_encodings()
         
         self.frame_to_process = None
@@ -21,34 +21,50 @@ class FaceRecognizer:
         
         self.current_locations = []
         self.current_names = []
-        self.is_running = False
+        self._stop_event = threading.Event()
         
         self.last_seen = {} # {student_id: datetime}
         self.debounce_period = timedelta(minutes=10)
 
     def load_encodings(self):
-        """Load encoded faces from the database."""
+        """Load encoded faces from the API."""
+        print("Fetching encodings from backend...")
         try:
-            students = self.db_session.query(Student).all()
+            students = self.api_client.fetch_students()
             for student in students:
-                self.known_face_encodings.append(pickle.loads(student.encoding))
-                self.known_face_names.append(student.name)
-                self.known_face_ids.append(student.id)
+                self.known_face_encodings.append(student['encoding'])
+                self.known_face_names.append(student['name'])
+                self.known_face_ids.append(student['id'])
             print(f"Loaded {len(self.known_face_encodings)} known faces.")
         except Exception as e:
             print(f"Error loading encodings: {e}")
 
     def start(self):
         """Start the background processing thread."""
-        self.is_running = True
+        self._stop_event.clear()
         self.thread = threading.Thread(target=self.process_loop, daemon=True)
         self.thread.start()
+        
+        self.sync_thread = threading.Thread(target=self.sync_loop, daemon=True)
+        self.sync_thread.start()
 
     def stop(self):
         """Stop the background processing thread."""
-        self.is_running = False
+        self._stop_event.set()
         if hasattr(self, 'thread'):
             self.thread.join()
+        if hasattr(self, 'sync_thread'):
+            self.sync_thread.join()
+
+    def sync_loop(self):
+        """Background loop to sync encodings periodically."""
+        while not self._stop_event.is_set():
+            # Wait for 300 seconds, or until stop event is set
+            if self._stop_event.wait(timeout=300):
+                break
+            
+            print("Auto-syncing encodings...")
+            self.load_encodings()
 
     def process_frame(self, frame):
         """Update the frame to be processed by the background thread.
@@ -64,7 +80,7 @@ class FaceRecognizer:
 
     def process_loop(self):
         """Background loop that processes frames."""
-        while self.is_running:
+        while not self._stop_event.is_set():
             frame = None
             with self.frame_lock:
                 if self.frame_to_process is not None:
@@ -80,8 +96,6 @@ class FaceRecognizer:
                 small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
                 
                 # Convert BGR (OpenCV) to RGB (face_recognition)
-                # Note: If input is already RGB (e.g. from PiCamera raw), this might invert colors.
-                # However, our CameraInterface standardizes on BGR.
                 rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
 
                 face_locations = face_recognition.face_locations(rgb_small_frame)
@@ -89,17 +103,20 @@ class FaceRecognizer:
 
                 face_names = []
                 for face_encoding in face_encodings:
-                    matches = face_recognition.compare_faces(self.known_face_encodings, face_encoding)
+                    # Default
                     name = "Unknown"
                     student_id = None
-
-                    face_distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
-                    if len(face_distances) > 0:
-                        best_match_index = np.argmin(face_distances)
-                        if matches[best_match_index]:
-                            name = self.known_face_names[best_match_index]
-                            student_id = self.known_face_ids[best_match_index]
-                            self.log_attendance(student_id, name)
+                    
+                    if len(self.known_face_encodings) > 0:
+                        matches = face_recognition.compare_faces(self.known_face_encodings, face_encoding)
+                        face_distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
+                        
+                        if len(face_distances) > 0:
+                            best_match_index = np.argmin(face_distances)
+                            if matches[best_match_index]:
+                                name = self.known_face_names[best_match_index]
+                                student_id = self.known_face_ids[best_match_index]
+                                self.log_attendance(student_id, name)
 
                     face_names.append(name)
 
@@ -116,14 +133,13 @@ class FaceRecognizer:
         
         if last_time is None or (now - last_time) > self.debounce_period:
             print(f"Logging attendance for {name} at {now}")
-            try:
-                attendance = Attendance(student_id=student_id, timestamp=now)
-                self.db_session.add(attendance)
-                self.db_session.commit()
+            success = self.api_client.log_attendance(student_id, name, now)
+            if success:
                 self.last_seen[student_id] = now
-            except Exception as e:
-                print(f"Database error: {e}")
-                self.db_session.rollback()
+            else:
+                # If API fails, we still debounce to avoid flooding the server with error requests
+                print("Failed to sync attendance. Retrying later.")
+                self.last_seen[student_id] = now
         else:
             # Debounced (ignored)
             pass
