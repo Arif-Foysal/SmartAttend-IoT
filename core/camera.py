@@ -52,8 +52,8 @@ class PiCamera(CameraInterface):
         try:
             # Capture array in RGB888 format
             frame = self.picam2.capture_array()
-            # Convert RGB to BGR for OpenCV compatibility
-            return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            # Return frame directly to test if it's already BGR or if conversion was wrong
+            return frame
         except Exception as e:
             print(f"PiCamera Error: {e}")
             return None

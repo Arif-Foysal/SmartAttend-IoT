@@ -5,4 +5,4 @@ setuptools
 numpy
 SQLAlchemy
 requests
-# picamera2 ; on Raspberry Pi only
+picamera2
