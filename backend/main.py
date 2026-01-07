@@ -10,19 +10,14 @@ import face_recognition
 from fastapi.middleware.cors import CORSMiddleware
 import models, schemas, database
 
-app = FastAPI(title="SmartAttend IoT Backend")
+from contextlib import asynccontextmanager
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], # Allow all origins for dev simplicity
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.on_event("startup")
-async def on_startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     await database.init_db()
+    yield
+
+app = FastAPI(title="SmartAttend IoT Backend", lifespan=lifespan)
 
 @app.get("/")
 def read_root():
@@ -222,3 +217,7 @@ async def read_attendance(skip: int = 0, limit: int = 100, db: AsyncSession = De
     )
     items = result.scalars().all()
     return items
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
