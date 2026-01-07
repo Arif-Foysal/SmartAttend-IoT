@@ -36,23 +36,24 @@ class PiCamera(CameraInterface):
     def __init__(self):
         try:
             from picamera2 import Picamera2 # type: ignore
+            print("Initializing Picamera2...")
             self.picam2 = Picamera2()
-            # Configure specifically for XRGB8888 as requested
-            config = self.picam2.create_video_configuration(main={"format": "XRGB8888", "size": (640, 480)})
+            # Use preview configuration for continuous video capture (RGB888 for OpenCV compatibility)
+            config = self.picam2.create_preview_configuration(main={"format": "RGB888", "size": (640, 480)})
             self.picam2.configure(config)
             self.picam2.start()
-        except ImportError:
-            raise ImportError("Picamera2 is not installed or supported on this system.")
+            print("Picamera2 started successfully.")
+        except ImportError as e:
+            raise ImportError(f"Picamera2 is not installed or supported on this system: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize Picamera2: {e}")
 
     def get_frame(self):
         try:
-            # Capture array (likely RGBX or XRGB)
+            # Capture array in RGB888 format
             frame = self.picam2.capture_array()
-            # Convert to BGR for consistency with OpenCV
-            # Assuming XRGB8888 results in RGBA/RGBX layout usually. 
-            # OpenCV cvtColor can handle 4-channel to 3-channel BGR.
-            # We try COLOR_RGBA2BGR.
-            return cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
+            # Convert RGB to BGR for OpenCV compatibility
+            return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         except Exception as e:
             print(f"PiCamera Error: {e}")
             return None
@@ -60,6 +61,7 @@ class PiCamera(CameraInterface):
     def stop(self):
         if hasattr(self, 'picam2'):
             self.picam2.stop()
+            print("Picamera2 stopped.")
 
 class CameraFactory:
     @staticmethod
