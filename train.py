@@ -1,109 +1,94 @@
 import os
-import cv2
-import face_recognition
-import pickle
 import sys
-# Ensure core can be imported if running this script directly
+import requests
+
+# Ensure we can import from core if needed, though we primarily use requests now
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from core.database import init_db, Student
+API_URL = "http://localhost:8000"
 
-def train_model(dataset_dir='dataset', model_path='encodings.pickle'):
-    print(f"Starting training on '{dataset_dir}'...")
+def train_model(dataset_dir='dataset'):
+    print(f"Starting training from '{dataset_dir}' via API at {API_URL}...")
     
-    # Initialize DB connection
-    try:
-        session = init_db()
-    except Exception as e:
-        print(f"Failed to connect to database: {e}")
-        return
-
-    # Clear existing student data to ensure DB matches dataset
-    try:
-        deleted_count = session.query(Student).delete()
-        session.commit()
-        print(f"Cleared {deleted_count} existing student records from database.")
-    except Exception as e:
-        print(f"Warning: Failed to clear old data: {e}")
-        session.rollback()
-
     # Check if dataset dir exists
     if not os.path.exists(dataset_dir):
-        print(f"Dataset directory '{dataset_dir}' not found. Please create it and add subfolders with images.")
-        # Create it for convenience
+        print(f"Dataset directory '{dataset_dir}' not found. Creating it...")
         os.makedirs(dataset_dir)
-        print(f"Created empty directory '{dataset_dir}'.")
+        print("Please add student folders with images to the 'dataset' directory and run this script again.")
         return
 
-    known_encodings = []
-    known_names = []
+    # Check API connection
+    try:
+        requests.get(API_URL, timeout=2)
+    except requests.exceptions.ConnectionError:
+        print(f"Error: Could not connect to backend at {API_URL}. Please ensure 'main.py' (backend) is running.")
+        return
 
-    # Iterate over person folders
+    # 1. Wipe existing data
+    print("Clearing existing student data...")
+    try:
+        # Fetch all students
+        resp = requests.get(f"{API_URL}/students/?limit=1000")
+        if resp.status_code == 200:
+            students = resp.json()
+            for s in students:
+                print(f"Deleting {s['name']} (ID: {s['id']})...")
+                requests.delete(f"{API_URL}/students/{s['id']}")
+        else:
+            print(f"Warning: Failed to fetch existing students: {resp.text}")
+    except Exception as e:
+        print(f"Error clearing data: {e}")
+        return
+
+    # 2. Upload new data
+    processed_count = 0
+    
     for name in os.listdir(dataset_dir):
         person_dir = os.path.join(dataset_dir, name)
         if not os.path.isdir(person_dir):
             continue
 
-        print(f"Processing images for {name}...")
-        image_count = 0
-        for filename in os.listdir(person_dir):
-            filepath = os.path.join(person_dir, filename)
+        images = [f for f in os.listdir(person_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        if not images:
+            print(f"Skipping {name}: No images found.")
+            continue
             
-            # Simple extension check
-            if not filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                continue
-
-            try:
-                # Load image
-                image = cv2.imread(filepath)
-                if image is None:
-                    print(f"Warning: Could not read image {filename}")
-                    continue
-                
-                # Convert to RGB (face_recognition expects RGB)
-                rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                
-                # Detect faces
-                boxes = face_recognition.face_locations(rgb, model='hog')
-                encodings = face_recognition.face_encodings(rgb, boxes)
-
-                if len(encodings) > 0:
-                    # Use the first face found
-                    encoding = encodings[0]
-                    known_encodings.append(encoding)
-                    known_names.append(name)
-                    
-                    # Serialize encoding for DB
-                    encoding_blob = pickle.dumps(encoding)
-                    
-                    # Add to Database
-                    student = Student(name=name, encoding=encoding_blob)
-                    session.add(student)
-                    image_count += 1
-                else:
-                    print(f"No face found in {filename} - skipping.")
-            except Exception as e:
-                print(f"Error processing {filename}: {e}")
+        print(f"Processing {name} ({len(images)} images)...")
         
-        print(f"Added {image_count} face encodings for {name}.")
+        student_id = None
+        
+        # Create student with first image
+        first_image = images[0]
+        try:
+            with open(os.path.join(person_dir, first_image), 'rb') as f:
+                files = {'photo': (first_image, f, 'image/jpeg')}
+                data = {'name': name}
+                resp = requests.post(f"{API_URL}/students/", data=data, files=files)
+                
+                if resp.status_code == 200:
+                    student_data = resp.json()
+                    student_id = student_data['id']
+                else:
+                    print(f"Failed to create student {name}: {resp.text}")
+                    continue
+        except Exception as e:
+            print(f"Error uploading {name}: {e}")
+            continue
 
-    try:
-        session.commit()
-        print("Database updated successfully.")
-    except Exception as e:
-        print(f"Error committing to database: {e}")
-        session.rollback()
-    
-    # Save to .pickle file as requested
-    data = {"encodings": known_encodings, "names": known_names}
-    try:
-        with open(model_path, "wb") as f:
-            f.write(pickle.dumps(data))
-        print(f"Encodings also saved to {model_path}")
-    except Exception as e:
-        print(f"Error saving pickle file: {e}")
-    
-    print("Training complete.")
+        # Upload remaining images
+        for img_file in images[1:]:
+            try:
+                with open(os.path.join(person_dir, img_file), 'rb') as f:
+                    files = {'photo': (img_file, f, 'image/jpeg')}
+                    resp = requests.post(f"{API_URL}/students/{student_id}/images", files=files)
+                    if resp.status_code != 200:
+                        print(f"Warning: Failed to upload extra image for {name}: {resp.text}")
+            except Exception as e:
+                 print(f"Error uploading image for {name}: {e}")
+
+        processed_count += 1
+
+    print(f"Training complete. Processed {processed_count} students.")
 
 if __name__ == "__main__":
     train_model()

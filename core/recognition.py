@@ -31,6 +31,12 @@ class FaceRecognizer:
         print("Fetching encodings from backend...")
         try:
             students = self.api_client.fetch_students()
+            
+            # Clear existing data to avoid duplicates
+            self.known_face_encodings = []
+            self.known_face_names = []
+            self.known_face_ids = []
+            
             for student in students:
                 self.known_face_encodings.append(student['encoding'])
                 self.known_face_names.append(student['name'])
