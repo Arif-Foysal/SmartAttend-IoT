@@ -28,20 +28,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const logs = ref<any[]>([])
+let pollInterval: any = null
 
 const fetchLogs = async () => {
     try {
-        const { data } = await useFetch('http://localhost:8000/attendance/')
-        if (data.value) {
-            logs.value = data.value as any[]
+        // Use $fetch for client-side data fetching without overhead
+        const data = await $fetch('http://localhost:8000/attendance/')
+        if (data) {
+            logs.value = data as any[]
         }
     } catch (e) {
         console.error("Error fetching attendance", e)
     }
 }
 
-fetchLogs()
+onMounted(() => {
+    fetchLogs()
+    // Poll every 2 seconds
+    pollInterval = setInterval(fetchLogs, 2000)
+})
+
+onUnmounted(() => {
+    if (pollInterval) clearInterval(pollInterval)
+})
 </script>

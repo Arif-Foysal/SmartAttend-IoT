@@ -19,6 +19,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SmartAttend IoT Backend", lifespan=lifespan)
 
+# CORS Configuration
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173", # Vite default
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # For development ease, or use 'origins' list for strictness
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.get("/")
 def read_root():
     return {"message": "SmartAttend API is running"}
