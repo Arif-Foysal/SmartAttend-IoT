@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import numpy as np
 from core.api_client import APIClient
 from core.display import DisplayManager
+from core.buzzer import SystemBuzzer
 
 class FaceRecognizer:
     def __init__(self, api_url='http://localhost:8000'):
@@ -16,6 +17,7 @@ class FaceRecognizer:
         
         self.api_client = APIClient(api_url)
         self.display_manager = DisplayManager()
+        self.buzzer = SystemBuzzer()
         self.load_encodings()
         
         self.frame_to_process = None
@@ -144,6 +146,11 @@ class FaceRecognizer:
         
         if last_time is None or (now - last_time) > self.debounce_period:
             print(f"Logging attendance for {name} at {now}")
+            
+            # Sound Alert
+            if self.buzzer:
+                self.buzzer.beep_success()
+                
             success = self.api_client.log_attendance(student_id, name, now)
             if success:
                 self.last_seen[student_id] = now
