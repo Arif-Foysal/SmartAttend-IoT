@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timedelta
 import numpy as np
 from core.api_client import APIClient
+from core.display import DisplayManager
 
 class FaceRecognizer:
     def __init__(self, api_url='http://localhost:8000'):
@@ -14,6 +15,7 @@ class FaceRecognizer:
         self.known_face_ids = []
         
         self.api_client = APIClient(api_url)
+        self.display_manager = DisplayManager()
         self.load_encodings()
         
         self.frame_to_process = None
@@ -136,6 +138,9 @@ class FaceRecognizer:
         """Log attendance with debouncing logic."""
         now = datetime.now()
         last_time = self.last_seen.get(student_id)
+        
+        # Update display immediately (DisplayManager handles debouncing)
+        self.display_manager.show_attendance(name, student_id)
         
         if last_time is None or (now - last_time) > self.debounce_period:
             print(f"Logging attendance for {name} at {now}")

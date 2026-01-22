@@ -6,3 +6,6 @@ numpy
 SQLAlchemy
 requests
 picamera2
+adafruit-circuitpython-ssd1306
+adafruit-blinka
+Pillow
